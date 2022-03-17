@@ -23,15 +23,15 @@ var defaults = {
 
 /**
  *          Voxel Physics Engine
- * 
+ *
  * Models a world of rigid bodies, to be integrated against
  * solid or liquid voxel terrain.
- * 
+ *
  * Takes `testSolid(x,y,z)` function to query block solidity
  * Takes `testFluid(x,y,z)` function to query if a block is a fluid
- *  
+ *
  * The `options` argument can take the following params:
- * 
+ *
  * ```js
  * {
  *     airDrag: 0.1,
@@ -40,7 +40,7 @@ var defaults = {
  *     gravity: [0, -10, 0],
  *     minBounceImpulse: .5, // lowest collision impulse that bounces
  * }
- * 
+ *
  * ```
 */
 export function Physics(opts, testSolid, testFluid) {
@@ -59,7 +59,7 @@ export function Physics(opts, testSolid, testFluid) {
 }
 
 
-/** 
+/**
  * Adds a physics body to the simulation
  * @returns {RigidBody}
 */
@@ -113,6 +113,7 @@ Physics.prototype.tick = function (dt) {
 
 function iterateBody(self, b, dt, noGravity) {
     vec3.copy(oldResting, b.resting)
+    vec3.set(distances, 0,0,0)
 
     // treat bodies with <= mass as static
     if (b.mass <= 0) {
@@ -178,7 +179,7 @@ function iterateBody(self, b, dt, noGravity) {
     }
 
     // sweeps aabb along dx and accounts for collisions
-    processCollisions(self, b.aabb, dx, b.resting)
+    processCollisions(self, b.aabb, dx, b.resting, distances)
 
     // if autostep, and on ground, run collisions again with stepped up aabb
     if (b.autoStep) {
@@ -200,7 +201,7 @@ function iterateBody(self, b, dt, noGravity) {
         // body's restitution depending on what terrain it hit
         // event argument is impulse J = m * dv
         vec3.scale(impacts, impacts, b.mass)
-        if (b.onCollide) b.onCollide(impacts)
+        if (b.onCollide) b.onCollide(impacts, distances)
 
         // bounce depending on restitution and minBounceImpulse
         if (b.restitution > 0 && mag > self.minBounceImpulse) {
@@ -315,11 +316,12 @@ var lateralVel = vec3.create()
 */
 
 // sweep aabb along velocity vector and set resting vector
-function processCollisions(self, box, velocity, resting) {
+function processCollisions(self, box, velocity, resting, distances) {
     vec3.set(resting, 0, 0, 0)
     return sweep(self.testSolid, box, velocity, function (dist, axis, dir, vec) {
         resting[axis] = dir
         vec[axis] = 0
+        distances[axis] = dist;
     })
 }
 
@@ -333,6 +335,7 @@ function processCollisions(self, box, velocity, resting) {
 
 var tmpBox = new aabb([], [])
 var tmpResting = vec3.create()
+var distances = vec3.create()
 var targetPos = vec3.create()
 var upvec = vec3.create()
 var leftover = vec3.create()
@@ -375,7 +378,7 @@ function tryAutoStepping(self, b, oldBox, dx) {
     // now move in X/Z however far was left over before hitting the obstruction
     vec3.subtract(leftover, targetPos, oldBox.base)
     leftover[1] = 0
-    processCollisions(self, oldBox, leftover, tmpResting)
+    processCollisions(self, oldBox, leftover, tmpResting, distances)
 
     // bail if no movement happened in the originally blocked direction
     if (xBlocked && !equals(oldBox.base[0], targetPos[0])) return
